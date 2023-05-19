@@ -1,0 +1,87 @@
+import speech_recognition as sr
+from gtts import gTTS
+import smtplib
+import imaplib
+from email.mime.text import MIMEText
+
+# Speech Recognition Setup
+recognizer = sr.Recognizer()
+microphone = sr.Microphone()
+
+# Text-to-Speech Setup
+def speak(text):
+    tts = gTTS(text=text, lang='en')
+    tts.save('output.mp3')
+    # Code for playing audio file 'output.mp3'
+
+# Email Configuration
+SMTP_SERVER = 'smtp.example.com'
+SMTP_PORT = 587
+IMAP_SERVER = 'imap.example.com'
+IMAP_PORT = 993
+EMAIL_USERNAME = 'your_email@example.com'
+EMAIL_PASSWORD = 'your_password'
+
+def send_email(to, subject, body):
+    msg = MIMEText(body)
+    msg['Subject'] = subject
+    msg['From'] = EMAIL_USERNAME
+    msg['To'] = to
+
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+        server.starttls()
+        server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+        server.sendmail(EMAIL_USERNAME, [to], msg.as_string())
+
+def read_emails():
+    with imaplib.IMAP4_SSL(IMAP_SERVER, IMAP_PORT) as server:
+        server.login(EMAIL_USERNAME, EMAIL_PASSWORD)
+        server.select('INBOX')
+        _, data = server.search(None, 'ALL')
+        email_ids = data[0].split()
+        
+        for email_id in email_ids:
+            _, data = server.fetch(email_id, '(BODY[HEADER.FIELDS (FROM SUBJECT)])')
+            header = data[0][1].decode('utf-8')
+            from_index = header.find('From: ') + 6
+            subject_index = header.find('Subject: ') + 9
+            from_address = header[from_index:header.find('\r', from_index)]
+            subject = header[subject_index:header.find('\r', subject_index)]
+            
+            speak(f'From: {from_address}')
+            speak(f'Subject: {subject}')
+
+# Main Loop
+while True:
+    speak('Listening...')
+    with microphone as source:
+        audio = recognizer.listen(source)
+
+    try:
+        speech_input = recognizer.recognize_google(audio)
+        if 'compose email' in speech_input:
+            speak('To whom do you want to send the email?')
+            with microphone as source:
+                audio = recognizer.listen(source)
+            recipient = recognizer.recognize_google(audio)
+            
+            speak('What is the subject of the email?')
+            with microphone as source:
+                audio = recognizer.listen(source)
+            subject = recognizer.recognize_google(audio)
+            
+            speak('What is the body of the email?')
+            with microphone as source:
+                audio = recognizer.listen(source)
+            body = recognizer.recognize_google(audio)
+            
+            send_email(recipient, subject, body)
+            speak('Email sent successfully!')
+            
+        elif 'read emails' in speech_input:
+            read_emails()
+            
+    except sr.UnknownValueError:
+        speak("Sorry, I didn't understand. Could you please repeat?")
+    except sr.RequestError:
+        speak("Sorry, I'm currently unavailable. Please try again later.")
